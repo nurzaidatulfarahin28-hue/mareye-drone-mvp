@@ -44,14 +44,19 @@ with col1:
 
 with col2:
     st.subheader("Highlighted Result")
-    # Load sample image
     img = cv2.imread("examples/original_sample.jpg")
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    
     # Simple detection: highlight dark regions as "pollution"
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     _, mask = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY_INV)
-    result = img_rgb.copy()
-    result[mask == 255] = [255, 0, 0]  # Highlight in red
+    
+    # Create semi-transparent overlay
+    mask_color = np.zeros_like(img_rgb)
+    mask_color[mask == 255] = [255, 0, 0]  # red for highlight
+    alpha = 0.3  # transparency
+    result = cv2.addWeighted(img_rgb, 1, mask_color, alpha, 0)
+    
     st.image(result, caption="After - Pollution Highlighted", use_column_width=True)
 
 # ----------------------------
@@ -83,8 +88,11 @@ if uploaded_file is not None:
     # Detection on uploaded image
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     _, mask = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY_INV)
-    result = img_rgb.copy()
-    result[mask == 255] = [255, 0, 0]  # Highlight in red
 
+    mask_color = np.zeros_like(img_rgb)
+    mask_color[mask == 255] = [255, 0, 0]  # semi-transparent red overlay
+    alpha = 0.3
+    result = cv2.addWeighted(img_rgb, 1, mask_color, alpha, 0)
+    
     st.image(result, caption="Highlighted Pollution Regions", use_column_width=True)
     st.success("✅ Detection applied! Adjust the slider to refine.")
