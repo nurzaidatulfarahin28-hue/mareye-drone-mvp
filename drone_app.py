@@ -40,6 +40,10 @@ min_contour_area = st.sidebar.slider("Minimum Contour Area", 10, 1000, default_m
 overlay_alpha = st.sidebar.slider("Overlay Transparency", 0.0, 1.0, default_alpha, step=0.05)
 detection_mode = st.sidebar.selectbox("Detection Mode", detection_modes)
 
+# Optional: choose highlight color
+highlight_color = st.sidebar.color_picker("Highlight Color", "#00FF00")  # default green
+highlight_color_bgr = tuple(int(highlight_color.lstrip("#")[i:i+2], 16) for i in (4, 2, 0))
+
 st.sidebar.markdown("""
 **Tips:**  
 - Start with default values and upload an image.  
@@ -65,7 +69,7 @@ with col2:
     st.image("examples/processed_sample.jpg", caption="After - Pollution Highlighted")
 
 # ----------------------------
-# Sample Images Download (hyperlink style)
+# Sample Images Download
 # ----------------------------
 st.header("📂 Try Sample Images")
 sample_zip_path = "sample_images.zip"
@@ -90,33 +94,53 @@ if uploaded_file is not None:
     img = cv2.imdecode(file_bytes, 1)
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-    # ----------------------------
-    # Detection logic
-    # ----------------------------
+    # Convert to grayscale
     gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
 
-    # Basic detection: original style
+    # Basic threshold detection
     _, mask = cv2.threshold(gray, threshold_intensity, 255, cv2.THRESH_BINARY_INV)
 
-    # Morphology to clean mask
+    # Morphological cleaning
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (morph_kernel, morph_kernel))
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
 
-    # Advanced detection: combine with Canny if selected
+    # Advanced: combine with Canny
     if detection_mode == "Advanced":
         edges = cv2.Canny(gray, canny_lower, canny_upper)
         mask = cv2.bitwise_or(mask, edges)
 
-    # Apply mask to original image
-    result = img_rgb.copy()
-    result[mask == 255] = [0, 0, 0]  # keep same style as processed_sample.jpg
+    # Contour detection
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    # Display side by side
+    # Create overlay for highlights
+    overlay = img_rgb.copy()
+
+    for cnt in contours:
+        if cv2.contourArea(cnt) > min_contour_area:
+            # Draw contour outline
+            cv2.drawContours(overlay, [cnt], -1, highlight_color_bgr, 2)
+            # Draw bounding box
+            x, y, w, h = cv2.boundingRect(cnt)
+            cv2.rectangle(overlay, (x, y), (x+w, y+h), (255, 255, 255), 2)
+
+    # Blend overlay with original
+    result = cv2.addWeighted(overlay, overlay_alpha, img_rgb, 1 - overlay_alpha, 0)
+
+    # Display results
     st.subheader("Detection Result")
     col1, col2 = st.columns(2)
     with col1:
         st.image(img_rgb, caption="Uploaded Image", use_column_width=True)
     with col2:
         st.image(result, caption="Highlighted Pollution Regions", use_column_width=True)
+
+    # Save option
+    if st.button("💾 Save Processed Image"):
+        out_path = "highlighted_result.png"
+        cv2.imwrite(out_path, cv2.cvtColor(result, cv2.COLOR_RGB2BGR))
+        with open(out_path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode()
+            href = f'<a href="data:file/png;base64,{b64}" download="highlighted_result.png">Download Here</a>'
+            st.markdown(href, unsafe_allow_html=True)
 
     st.success("✅ Detection applied! Adjust the sliders to refine.")
